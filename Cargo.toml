@@ -5,4 +5,6 @@ authors = ["emabee <meinolf.block@sap.com>"]
 edition = "2018"
 
 [dependencies]
-time = {version= "0.2"}
+flexi_logger = "*"
+log = "*"
+notify = "*"
