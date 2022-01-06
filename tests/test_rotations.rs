@@ -1,8 +1,9 @@
-use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
+use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
     io::Write,
     path::{Path, PathBuf},
     sync::mpsc,
+    time::Duration,
 };
 
 const COUNT: u8 = 2;
@@ -53,7 +54,7 @@ pub fn dispatch(count: u8) -> Option<u8> {
 fn work(value: u8) {
     match value {
         0 => {
-            write_to_file();
+            write_to_file_and_watch_for_events();
         }
         1 => {
             mess_with_file();
@@ -64,14 +65,14 @@ fn work(value: u8) {
     };
 }
 
-fn write_to_file() {
+fn write_to_file_and_watch_for_events() {
     std::fs::remove_dir_all(LOG_FOLDER).ok();
     std::fs::create_dir_all(LOG_FOLDER).unwrap();
     std::fs::create_dir_all(MOVED_FOLDER).unwrap();
+    let watched_folder = std::fs::canonicalize(&LOG_FOLDER).unwrap();
 
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut watcher = watcher(tx, std::time::Duration::from_millis(50)).unwrap();
-    let watched_folder = std::fs::canonicalize(&LOG_FOLDER).unwrap();
+    let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_millis(50)).unwrap();
     watcher
         .watch(&watched_folder, RecursiveMode::NonRecursive)
         .unwrap();
@@ -85,7 +86,7 @@ fn write_to_file() {
 
     // write lines to output in a slow loop
     for i in 1..400 {
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(10));
         writeln!(output_file, "YYY {} AAA", i).unwrap();
 
         loop {
@@ -158,7 +159,7 @@ fn write_to_file() {
 fn mess_with_file() {
     // rename the log file
     for i in 0..3 {
-        std::thread::sleep(std::time::Duration::from_millis(400));
+        std::thread::sleep(Duration::from_millis(400));
 
         let mut target_name = PathBuf::from(MOVED_FOLDER);
         target_name.push(format!("file{}.txt", i));
@@ -179,7 +180,7 @@ fn mess_with_file() {
 
     // remove the log file
     for _ in 0..3 {
-        std::thread::sleep(std::time::Duration::from_millis(400));
+        std::thread::sleep(Duration::from_millis(400));
         match std::fs::remove_file(OUTPUT_FILE) {
             Ok(()) => {
                 println!("Removed the log file {:?}", &OUTPUT_FILE);
