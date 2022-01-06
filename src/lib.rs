@@ -16,6 +16,7 @@ pub fn start_external_rotate_watcher(folder: &Path, trigger: Arc<AtomicBool>) {
     watcher
         .watch(&watched_folder, RecursiveMode::NonRecursive)
         .unwrap();
+    println!("Watcher thread set up for {}", watched_folder.display());
 
     // in a separate thread, wait for events for the log file
     let builder =
