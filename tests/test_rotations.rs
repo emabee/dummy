@@ -5,74 +5,82 @@ use std::{
     sync::mpsc,
 };
 
+const COUNT: u8 = 2;
+
+const LOG_FOLDER: &str = "logs";
+const MOVED_FOLDER: &str = "logs/moved";
+const OUTPUT_FILE: &str = "logs/test.txt";
+
 #[test]
 fn test_rotations() {
-    let log_dir = PathBuf::from("logs");
-    std::fs::remove_dir_all(log_dir.clone()).ok();
+    if let Some(value) = dispatch(COUNT) {
+        work(value)
+    }
+}
 
-    let mut mv_dir = log_dir.clone();
-    mv_dir.push("moved");
-    std::fs::create_dir_all(mv_dir.clone()).unwrap();
-    let mv_dir2 = mv_dir.clone();
+// launch child process from same executable and sets there an additional environment variable
+// or finds this environment variable and returns its value
+pub fn dispatch(count: u8) -> Option<u8> {
+    const CTRL_INDEX: &str = "CTRL_INDEX";
+    match std::env::var(CTRL_INDEX) {
+        Err(_) => {
+            println!("dispatcher");
+            let progname = std::env::args().next().unwrap();
+            let mut children = vec![];
+            for value in 0..count {
+                let mut command = std::process::Command::new(progname.clone());
+                children.push(
+                    command
+                        .arg("--nocapture")
+                        .env(CTRL_INDEX, value.to_string())
+                        .spawn()
+                        .unwrap(),
+                );
+            }
+            for (value, mut child) in children.into_iter().enumerate() {
+                let exit_status = child.wait().unwrap();
+                assert!(exit_status.success(), "executor {} failed", value);
+            }
+            None
+        }
+        Ok(value) => {
+            println!("executor {}", value);
+            Some(value.parse().unwrap())
+        }
+    }
+}
+
+fn work(value: u8) {
+    match value {
+        0 => {
+            write_to_file();
+        }
+        1 => {
+            mess_with_file();
+        }
+        COUNT..=u8::MAX => {
+            unreachable!("dtrtgfg")
+        }
+    };
+}
+
+fn write_to_file() {
+    std::fs::remove_dir_all(LOG_FOLDER).ok();
+    std::fs::create_dir_all(LOG_FOLDER).unwrap();
+    std::fs::create_dir_all(MOVED_FOLDER).unwrap();
+
     let (tx, rx) = std::sync::mpsc::channel();
     let mut watcher = watcher(tx, std::time::Duration::from_millis(50)).unwrap();
-    std::fs::create_dir_all(&log_dir).unwrap();
-    let watched_folder = std::fs::canonicalize(&log_dir).unwrap();
+    let watched_folder = std::fs::canonicalize(&LOG_FOLDER).unwrap();
     watcher
         .watch(&watched_folder, RecursiveMode::NonRecursive)
         .unwrap();
     println!("Watcher set up for {}", watched_folder.display());
 
-    let mut output = log_dir.clone();
-    output.push("test.txt");
-
-    let output_clone = output.clone();
-
-    // start a thread that messes with the output file (three renames, three deletes)
-    let worker_handle = std::thread::Builder::new()
-        .name("file rotator".to_string())
-        .spawn(move || {
-            for i in 0..3 {
-                std::thread::sleep(std::time::Duration::from_millis(400));
-                // rotate the log file
-                let mut target_name = mv_dir2.clone();
-                target_name.push(format!("file{}.txt", i));
-                println!(
-                    "Renaming the log file {:?} to {:?}",
-                    &output_clone, &target_name,
-                );
-                match std::fs::rename(output_clone.clone(), &target_name.clone()) {
-                    Ok(()) => {}
-                    Err(e) => {
-                        println!(
-                            "Cannot rename log file {:?} to {:?} due to {:?}",
-                            &output_clone, &target_name, e
-                        )
-                    }
-                }
-            }
-            for _ in 0..3 {
-                std::thread::sleep(std::time::Duration::from_millis(400));
-                match std::fs::remove_file(output_clone.clone()) {
-                    Ok(()) => {
-                        println!("Removed the log file {:?}", &output_clone,)
-                    }
-                    Err(e) => {
-                        // should be panic - is defused because test doesn't work properly on linux
-                        println!(
-                            "Cannot remove the log file {:?} due to {:?}",
-                            &output_clone, e
-                        )
-                    }
-                }
-            }
-        })
-        .unwrap();
-
     let mut output_file = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
-        .open(output.clone())
+        .open(OUTPUT_FILE)
         .unwrap();
 
     // write lines to output in a slow loop
@@ -92,7 +100,7 @@ fn test_rotations() {
                             output_file = std::fs::OpenOptions::new()
                                 .write(true)
                                 .create(true)
-                                .open(output.clone())
+                                .open(OUTPUT_FILE)
                                 .unwrap();
                         }
                         _event => {}
@@ -109,22 +117,23 @@ fn test_rotations() {
         }
     }
 
-    worker_handle.join().unwrap();
-
-    // print the files we created
+    // print a summary of the resulting files
     println!("");
     let mut counter = 0;
-    for entry in std::fs::read_dir(log_dir).unwrap() {
+    for entry in std::fs::read_dir(LOG_FOLDER).unwrap() {
         let entry = entry.unwrap();
         if entry.file_type().unwrap().is_file() {
-            println!(
-                "{} with {} lines",
-                std::fs::canonicalize(entry.path()).unwrap().display(),
-                count_lines(&entry.path(), &mut counter)
-            );
+            match std::fs::canonicalize(entry.path()) {
+                Ok(p) => println!(
+                    "{} with {} lines",
+                    p.display(),
+                    count_lines(&entry.path(), &mut counter)
+                ),
+                Err(_e) => println!("{} with {} lines", entry.path().display(), 0),
+            }
         }
     }
-    for entry in std::fs::read_dir(mv_dir).unwrap() {
+    for entry in std::fs::read_dir(MOVED_FOLDER).unwrap() {
         let entry = entry.unwrap();
         if entry.file_type().unwrap().is_file() {
             println!(
@@ -138,14 +147,52 @@ fn test_rotations() {
     println!("Found {} lines in all files together", counter);
     println!(
         "Output file ends with ->{}<-",
-        std::fs::read_to_string(output)
+        std::fs::read_to_string(OUTPUT_FILE)
             .unwrap()
             .lines()
             .last()
             .unwrap()
     );
+}
 
-    assert!(false, "Ending with error to see the output");
+fn mess_with_file() {
+    // rename the log file
+    for i in 0..3 {
+        std::thread::sleep(std::time::Duration::from_millis(400));
+
+        let mut target_name = PathBuf::from(MOVED_FOLDER);
+        target_name.push(format!("file{}.txt", i));
+        println!(
+            "Renaming the log file {:?} to {:?}",
+            &OUTPUT_FILE, &target_name,
+        );
+        match std::fs::rename(OUTPUT_FILE, &target_name.clone()) {
+            Ok(()) => {}
+            Err(e) => {
+                println!(
+                    "Cannot rename the log file {:?} to {:?} due to {:?}",
+                    &OUTPUT_FILE, &target_name, e
+                )
+            }
+        }
+    }
+
+    // remove the log file
+    for _ in 0..3 {
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        match std::fs::remove_file(OUTPUT_FILE) {
+            Ok(()) => {
+                println!("Removed the log file {:?}", &OUTPUT_FILE);
+            }
+            Err(e) => {
+                // should be panic - is defused because test doesn't work properly on linux
+                println!(
+                    "Cannot remove the log file {:?} due to {:?}",
+                    &OUTPUT_FILE, e
+                );
+            }
+        }
+    }
 }
 
 fn count_lines(path: &Path, counter: &mut usize) -> usize {
