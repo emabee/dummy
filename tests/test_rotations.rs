@@ -1,11 +1,8 @@
-use dummy::start_external_rotate_watcher;
+use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use std::{
     io::Write,
     path::{Path, PathBuf},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::mpsc,
 };
 
 #[test]
@@ -17,19 +14,25 @@ fn test_rotations() {
     mv_dir.push("moved");
     std::fs::create_dir_all(mv_dir.clone()).unwrap();
     let mv_dir2 = mv_dir.clone();
-    let trigger = Arc::new(AtomicBool::new(false));
-    start_external_rotate_watcher(&log_dir, Arc::clone(&trigger));
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut watcher = watcher(tx, std::time::Duration::from_millis(50)).unwrap();
+    std::fs::create_dir_all(&log_dir).unwrap();
+    let watched_folder = std::fs::canonicalize(&log_dir).unwrap();
+    watcher
+        .watch(&watched_folder, RecursiveMode::NonRecursive)
+        .unwrap();
+    println!("Watcher set up for {}", watched_folder.display());
 
     let mut output = log_dir.clone();
     output.push("test.txt");
 
     let output_clone = output.clone();
 
-    // start a thread that messes with the output file
+    // start a thread that messes with the output file (three renames, three deletes)
     let worker_handle = std::thread::Builder::new()
         .name("file rotator".to_string())
         .spawn(move || {
-            for i in 0..4 {
+            for i in 0..3 {
                 std::thread::sleep(std::time::Duration::from_millis(400));
                 // rotate the log file
                 let mut target_name = mv_dir2.clone();
@@ -48,7 +51,7 @@ fn test_rotations() {
                     }
                 }
             }
-            for _ in 0..2 {
+            for _ in 0..3 {
                 std::thread::sleep(std::time::Duration::from_millis(400));
                 match std::fs::remove_file(output_clone.clone()) {
                     Ok(()) => {
@@ -77,16 +80,32 @@ fn test_rotations() {
         std::thread::sleep(std::time::Duration::from_millis(10));
         writeln!(output_file, "YYY {} AAA", i).unwrap();
 
-        if trigger.swap(false, Ordering::Relaxed) {
-            println!(
-                "    Trigger was pulled, reopening the file! (in loop {})",
-                i
-            );
-            output_file = std::fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .open(output.clone())
-                .unwrap();
+        loop {
+            match rx.try_recv() {
+                Ok(debounced_event) => {
+                    // println!("  Event detected ({:?})", debounced_event);
+                    match debounced_event {
+                        DebouncedEvent::NoticeRemove(ref _path)
+                        | DebouncedEvent::Remove(ref _path)
+                        | DebouncedEvent::Rename(ref _path, _) => {
+                            println!("  Reopening the file! (in loop {})", i);
+                            output_file = std::fs::OpenOptions::new()
+                                .write(true)
+                                .create(true)
+                                .open(output.clone())
+                                .unwrap();
+                        }
+                        _event => {}
+                    }
+                }
+                Err(mpsc::TryRecvError::Empty) => {
+                    break;
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    println!("  Error while watching the log file (in loop {})", i);
+                    break;
+                }
+            }
         }
     }
 
