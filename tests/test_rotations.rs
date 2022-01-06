@@ -34,15 +34,13 @@ fn test_rotations() {
                 // rotate the log file
                 let mut target_name = mv_dir2.clone();
                 target_name.push(format!("file{}.txt", i));
+                println!(
+                    "Renaming the log file {:?} to {:?}",
+                    &output_clone, &target_name,
+                );
                 match std::fs::rename(output_clone.clone(), &target_name.clone()) {
-                    Ok(()) => {
-                        println!(
-                            "Renamed the log file {:?} to {:?}",
-                            &output_clone, &target_name,
-                        )
-                    }
+                    Ok(()) => {}
                     Err(e) => {
-                        // should be panic - is defused because test doesn't work properly on linux
                         println!(
                             "Cannot rename log file {:?} to {:?} due to {:?}",
                             &output_clone, &target_name, e
@@ -81,7 +79,7 @@ fn test_rotations() {
 
         if trigger.swap(false, Ordering::Relaxed) {
             println!(
-                "Loop {} detected that the trigger was pulled! Reopening the file!",
+                "    Trigger was pulled, reopening the file! (in loop {})",
                 i
             );
             output_file = std::fs::OpenOptions::new()
@@ -101,8 +99,8 @@ fn test_rotations() {
         let entry = entry.unwrap();
         if entry.file_type().unwrap().is_file() {
             println!(
-                "{:?} with {} lines",
-                entry.path(),
+                "{} with {} lines",
+                std::fs::canonicalize(entry.path()).unwrap().display(),
                 count_lines(&entry.path(), &mut counter)
             );
         }
@@ -111,8 +109,8 @@ fn test_rotations() {
         let entry = entry.unwrap();
         if entry.file_type().unwrap().is_file() {
             println!(
-                "{:?} with {} lines",
-                entry.path(),
+                "{} with {} lines",
+                std::fs::canonicalize(entry.path()).unwrap().display(),
                 count_lines(&entry.path(), &mut counter)
             );
         }

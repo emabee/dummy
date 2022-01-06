@@ -29,20 +29,19 @@ pub fn start_external_rotate_watcher(folder: &Path, trigger: Arc<AtomicBool>) {
             loop {
                 match rx.recv() {
                     Ok(debounced_event) => {
+                        println!("  Event detected ({:?})", debounced_event);
                         match debounced_event {
                             DebouncedEvent::NoticeRemove(ref _path)
                             | DebouncedEvent::Remove(ref _path)
                             | DebouncedEvent::Rename(ref _path, _) => {
-                                // if path.canonicalize().map(|x| x == logfile).unwrap_or(false) {
-                                // trigger a restart of the state with append mode
+                                println!("  Pulling the trigger");
                                 trigger.deref().store(true, Ordering::Relaxed);
-                                // }
                             }
                             _event => {}
                         }
                     }
                     Err(e) => {
-                        println!("error while watching the log file, caused by {}", &e,);
+                        println!("  Error while watching the log file, caused by {}", &e,);
                     }
                 }
             }
