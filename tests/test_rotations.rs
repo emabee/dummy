@@ -30,10 +30,6 @@ fn write_to_file_and_watch_for_events() {
                 // rename the log file
                 let mut target_name = PathBuf::from(MOVED_FOLDER);
                 target_name.push(format!("file{}.txt", i));
-                println!(
-                    "Renaming the log file {:?} to {:?}",
-                    &OUTPUT_FILE, &target_name,
-                );
                 match std::fs::rename(OUTPUT_FILE, &target_name.clone()) {
                     Ok(()) => {
                         println!(
@@ -58,6 +54,7 @@ fn write_to_file_and_watch_for_events() {
             125 | 150 | 175 | 200 => match std::fs::remove_file(OUTPUT_FILE) {
                 Ok(()) => {
                     println!("Removed the log file {:?}", &OUTPUT_FILE);
+                    std::mem::drop(&mut output_file);
                     output_file = std::fs::OpenOptions::new()
                         .write(true)
                         .create(true)
