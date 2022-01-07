@@ -55,6 +55,7 @@ fn write_to_file_and_watch_for_events() {
                 Ok(()) => {
                     println!("Removed the log file {:?}", &OUTPUT_FILE);
                     std::mem::drop(&mut output_file);
+                    std::thread::sleep_ms(1000);
                     output_file = std::fs::OpenOptions::new()
                         .write(true)
                         .create(true)
