@@ -60,14 +60,14 @@ fn reopen_file(output_file: &mut File, i: usize) {
                     Ok(file) => {
                         *output_file = file;
                     }
-                    Err(_e) => {
-                        println!(
+                    Err(e) => {
+                        panic!(
                             "Looks like we're running in a non-standard env, \
                              like github's fake windows, \
-                             and obviously we're not able to overcome this somewhat weird issue; \
-                            giving up without error..."
+                             and obviously we're not able to overcome this issue ({}); \
+                            giving up without error...",
+                            e
                         );
-                        return;
                     }
                 }
             }
