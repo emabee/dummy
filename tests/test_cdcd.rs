@@ -16,21 +16,21 @@ fn main() {
 
     std::fs::remove_file(OUTPUT_FILE).expect("first delete failed");
 
-    reopen_file(&mut output_file, 2);
+    reopen_file(&mut output_file).unwrap();
     writeln!(output_file, "sdlsakjdpuwqeksadlsakd 2").expect("second write failed");
 
     std::fs::remove_file(OUTPUT_FILE).expect("second delete failed");
 
-    reopen_file(&mut output_file, 3);
+    reopen_file(&mut output_file).unwrap();
     writeln!(output_file, "sdlsakjdpuwqeksadlsakd 3").expect("third write failed");
 
     std::fs::remove_file(OUTPUT_FILE).expect("third delete failed");
 
-    reopen_file(&mut output_file, 4);
+    reopen_file(&mut output_file).unwrap();
     writeln!(output_file, "sdlsakjdpuwqeksadlsakd 3").expect("fourth write failed");
 }
 
-fn reopen_file(output_file: &mut File, i: usize) -> Result<(), std::io::Error> {
+fn reopen_file(output_file: &mut File) -> Result<(), std::io::Error> {
     match open_file(OUTPUT_FILE) {
         Ok(file) => {
             // proved to work on standard windows, linux, mac
@@ -44,6 +44,7 @@ fn reopen_file(output_file: &mut File, i: usize) -> Result<(), std::io::Error> {
             *output_file = open_file(OUTPUT_FILE)?;
         }
     }
+    Ok(())
 }
 
 fn open_file(p: &str) -> Result<std::fs::File, std::io::Error> {
