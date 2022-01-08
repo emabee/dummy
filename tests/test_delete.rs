@@ -1,11 +1,14 @@
 use std::fs::File;
 use std::io::Write;
 
-const OUTPUT_FILE: &str = "test_cdcd.txt";
-const DUMMY_FILE: &str = "test_cdcd_dummy.txt";
+const LOG_FOLDER: &str = "logs";
+const OUTPUT_FILE: &str = "logs/test_delete.txt";
 
 #[test]
 fn main() {
+    std::fs::remove_dir_all(LOG_FOLDER).ok();
+    std::fs::create_dir_all(LOG_FOLDER).unwrap();
+
     let mut output_file = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
@@ -31,6 +34,7 @@ fn main() {
 }
 
 fn reopen_file(output_file: &mut File) -> Result<(), std::io::Error> {
+    const DUMMY_FILE: &str = "test_delete_dummy.txt";
     match open_file(OUTPUT_FILE) {
         Ok(file) => {
             // proved to work on standard windows, linux, mac
