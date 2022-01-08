@@ -30,48 +30,26 @@ fn main() {
     writeln!(output_file, "sdlsakjdpuwqeksadlsakd 3").expect("fourth write failed");
 }
 
-fn reopen_file(output_file: &mut File, i: usize) {
-    match std::fs::OpenOptions::new()
+fn reopen_file(output_file: &mut File, i: usize) -> Result<(), std::io::Error> {
+    match open_file(OUTPUT_FILE) {
+        Ok(file) => {
+            // proved to work on standard windows, linux, mac
+            *output_file = file;
+        }
+        Err(_unexpected_error) => {
+            // there are environments, like github's windows container,
+            // where this extra step helps to overcome the _unexpected_error
+            *output_file = open_file(DUMMY_FILE)?;
+            std::fs::remove_file(DUMMY_FILE)?;
+            *output_file = open_file(OUTPUT_FILE)?;
+        }
+    }
+}
+
+fn open_file(p: &str) -> Result<std::fs::File, std::io::Error> {
+    std::fs::OpenOptions::new()
         .write(true)
         .create(true)
         .append(true)
-        .open(OUTPUT_FILE)
-    {
-        Ok(file) => {
-            *output_file = file;
-        }
-        Err(e) => match e.kind() {
-            std::io::ErrorKind::PermissionDenied => {
-                *output_file = std::fs::OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .append(true)
-                    .open(DUMMY_FILE)
-                    .unwrap();
-                // std::thread::sleep(std::time::Duration::from_millis(5000));
-                std::fs::remove_file(DUMMY_FILE).expect("second delete failed");
-
-                match std::fs::OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .append(true)
-                    .open(OUTPUT_FILE)
-                {
-                    Ok(file) => {
-                        *output_file = file;
-                    }
-                    Err(e) => {
-                        panic!(
-                            "Looks like we're running in a non-standard env, \
-                             like github's fake windows, \
-                             and obviously we're not able to overcome this issue ({}); \
-                            giving up without error...",
-                            e
-                        );
-                    }
-                }
-            }
-            _ => panic!("{}. open failed with {:?}", i, e),
-        },
-    }
+        .open(p)
 }
